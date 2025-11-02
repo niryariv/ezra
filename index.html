@@ -90,8 +90,14 @@
 		style: 'https://tiles.openfreemap.org/styles/liberty',
 		center: [35.0, 31.0], // Default center (Israel) - will be adjusted by fitBounds
 		zoom: 8, // Default zoom - will be adjusted by fitBounds
-		localIdeographFontFamily: 'Arial, sans-serif' // Fallback font for RTL text
+		localIdeographFontFamily: 'Arial, sans-serif', // Fallback font for RTL text
+		attributionControl: false // We'll define our own attribution below
 	});
+	
+	// Add custom attribution control
+	map.addControl(new maplibregl.AttributionControl({
+		customAttribution: '<a href="https://ezraorion.org">עזרא אוריון</a>'
+	}));
 
 	var markers = [];
 
