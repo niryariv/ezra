@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="he">
 <head>
 	<script async src="https://www.googletagmanager.com/gtag/js?id=UA-130322193-1"></script>
 	<title>עזרא אוריון</title>
@@ -7,16 +7,14 @@
 	<meta charset="utf-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-	<!-- <link rel="shortcut icon" type="image/x-icon" href="docs/images/favicon.ico" /> -->
+	<!-- MapLibre GL JS CSS -->
+	<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" />
 
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.3.4/dist/leaflet.css" integrity="sha512-puBpdR0798OZvTTbP4A8Ix/l+A4dHDD0DGqYW6RQ+9jxkRFclaxxQb/SJAWZfWAkuyeQUytO7+7N4QKrDh+drA==" crossorigin=""/>
-  <script src="https://unpkg.com/leaflet@1.3.4/dist/leaflet.js" integrity="sha512-nMMmRyTVoLYqjP9hrbed9S+FzjZHW5gY1TWCHA5ckwXZBadntCNs8kEqAWdrb9O7rxbCaA4lKTIWjDXZxflOcA==" crossorigin=""></script>
-	<script src="leaflet-providers.js"></script>
+	<!-- MapLibre GL JS -->
+	<script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
 
-	<script src="papaparse.min.js"></script>
-
-	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet.locatecontrol@0.65.1/dist/L.Control.Locate.min.css" />
-	<script src="https://cdn.jsdelivr.net/npm/leaflet.locatecontrol@0.65.1/dist/L.Control.Locate.min.js" charset="utf-8"></script>
+	<!-- PapaParse (CDN) -->
+	<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 
 	<style>
 		html, body {
@@ -26,19 +24,37 @@
 		}
 
 		#map {
-			height: 100%; width: 100vw;
+			height: 100%;
+			width: 100vw;
 		}
 
 		*:focus {
-		    outline: 0;
+			outline: 0;
 		}
 
-		.leaflet-popup-content-wrapper {
+		.maplibregl-popup-content-wrapper {
 			direction: rtl;
-		  font-size:16px;
-		  line-height:24px;
+			font-size: 16px;
+			line-height: 24px;
 			text-align: right;
-	  }
+		}
+
+		.maplibregl-ctrl-locate {
+			background: #fff;
+			border: 2px solid rgba(0,0,0,0.2);
+			cursor: pointer;
+			padding: 10px;
+			border-radius: 4px;
+			margin: 10px;
+		}
+
+		.maplibregl-ctrl-locate:hover {
+			background: #f4f4f4;
+		}
+
+		.maplibregl-marker {
+			cursor: pointer;
+		}
 
 		.title {
 			font-weight: bold;
@@ -51,9 +67,8 @@
 		.icon-image {
 			background-color: #fff;
 			padding: 4px;
-			border-radius:50px;
+			border-radius: 50px;
 		}
-
 	</style>
 </head>
 <body>
@@ -61,55 +76,194 @@
 <div id='map'></div>
 
 <script>
-
-	var map = L.map('map');
-	var markers = L.featureGroup();
-
-	// L.tileLayer.provider('OpenMapSurfer.Roads').addTo(map);
-	L.tileLayer('https://api.tiles.mapbox.com/v4/{id}/{z}/{x}/{y}.png?access_token={accessToken}', {
-	attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors, <a href="https://creativecommons.org/licenses/by-sa/2.0/">CC-BY-SA</a>, Imagery © <a href="https://www.mapbox.com/">Mapbox</a>',
-	maxZoom: 18,
-	id: 'mapbox.streets',
-	accessToken: 'pk.eyJ1IjoibmlyeWFyaXYiLCJhIjoiQjdJeWdqZyJ9.pZOwn6stABGoptmp0DH1wg'
-}).addTo(map);
-
-	L.control.locate({
-		onLocationError: function(control){return false;}
-	}).addTo(map);
-
-
-	Papa.parse(
-		"https://docs.google.com/spreadsheets/d/e/2PACX-1vT0sEo1rxF4M-irewIk--Ik1s7xYtyPUwSmr4VVTlUEWnQMhcGgV5JkZHEQm4Atq36JZg7mvRTBUS7n/pub?output=csv",
-		{
-			download: true,
-			header: true,
-			complete: function(results) {
-				results.data.forEach(add_point);
-				map.fitBounds(markers.getBounds(), {padding: [20,20]});
-				markers.addTo(map);
-			}
-		}
+	// Register RTL text plugin for Hebrew/Arabic support
+	maplibregl.setRTLTextPlugin(
+		'https://unpkg.com/@mapbox/mapbox-gl-rtl-text@0.2.3/mapbox-gl-rtl-text.min.js',
+		null,
+		true // Lazy load
 	);
 
+	// Initialize MapLibre map with OpenFreeMap style (free, no API key required)
+	// Center and zoom will be set after data loads via fitBounds
+	var map = new maplibregl.Map({
+		container: 'map',
+		style: 'https://tiles.openfreemap.org/styles/liberty',
+		center: [35.0, 31.0], // Default center (Israel) - will be adjusted by fitBounds
+		zoom: 8, // Default zoom - will be adjusted by fitBounds
+		localIdeographFontFamily: 'Arial, sans-serif' // Fallback font for RTL text
+	});
 
+	var markers = [];
 
-	function add_point(p){
+	// Add navigation controls
+	map.addControl(new maplibregl.NavigationControl());
+
+	// Custom locate control
+	var locateButton = document.createElement('button');
+	locateButton.className = 'maplibregl-ctrl-locate';
+	locateButton.innerHTML = '📍';
+	locateButton.title = 'Locate me';
+	locateButton.onclick = function() {
+		if (navigator.geolocation) {
+			navigator.geolocation.getCurrentPosition(function(position) {
+				map.flyTo({
+					center: [position.coords.longitude, position.coords.latitude],
+					zoom: 15
+				});
+			}, function() {
+				alert('Unable to get your location');
+			});
+		}
+	};
+
+	// Create locate control wrapper
+	var LocateControl = function() {};
+	LocateControl.prototype.onAdd = function() {
+		var locateControl = document.createElement('div');
+		locateControl.className = 'maplibregl-ctrl maplibregl-ctrl-group';
+		locateControl.appendChild(locateButton);
+		return locateControl;
+	};
+	LocateControl.prototype.onRemove = function() {};
+	
+	map.addControl(new LocateControl(), 'top-right');
+
+	// Wait for map to load before adding markers
+	map.on('load', function() {
+		// Update map layers to prefer Hebrew names when available
+		// This ensures place names (cities, streets, etc.) display in Hebrew when available
+		var layers = map.getStyle().layers;
+		for (var i = 0; i < layers.length; i++) {
+			var layer = layers[i];
+			if (layer.type === 'symbol' && layer.layout && layer.layout['text-field']) {
+				var currentField = layer.layout['text-field'];
+				try {
+					// Only update if it's a simple string field reference (like ['get', 'name'])
+					// or if it already contains name references
+					var shouldUpdate = false;
+					var fieldToWrap = currentField;
+					
+					if (Array.isArray(currentField)) {
+						// Check if it's a simple get expression or contains name
+						if (currentField[0] === 'get' && currentField[1]) {
+							// It's a simple ['get', 'field'] - wrap it
+							fieldToWrap = currentField;
+							shouldUpdate = true;
+						} else if (JSON.stringify(currentField).includes('name')) {
+							// Complex expression that uses name - wrap the whole thing
+							fieldToWrap = currentField;
+							shouldUpdate = true;
+						}
+					} else if (typeof currentField === 'string' && currentField.includes('name')) {
+						// Simple string reference
+						shouldUpdate = true;
+					}
+					
+					if (shouldUpdate) {
+						// Create a coalesce expression to prefer Hebrew, then Arabic, then original
+						var newField = [
+							'coalesce',
+							['get', 'name:he'],
+							['get', 'name:ar'],
+							fieldToWrap
+						];
+						map.setLayoutProperty(layer.id, 'text-field', newField);
+					}
+				} catch (e) {
+					// Some layers might not support modification, skip them silently
+				}
+			}
+		}
+
+		// Parse CSV data
+		Papa.parse(
+			"https://docs.google.com/spreadsheets/d/e/2PACX-1vT0sEo1rxF4M-irewIk--Ik1s7xYtyPUwSmr4VVTlUEWnQMhcGgV5JkZHEQm4Atq36JZg7mvRTBUS7n/pub?output=csv",
+			{
+				download: true,
+				header: true,
+				complete: function(results) {
+					var bounds = [];
+					results.data.forEach(function(p) {
+						if (add_point(p)) {
+							bounds.push([parseFloat(p.lon), parseFloat(p.lat)]);
+						}
+					});
+					
+					// Fit map to bounds of all markers by default
+					if (bounds.length > 0) {
+						// Calculate bounding box
+						var lons = bounds.map(function(b) { return b[0]; });
+						var lats = bounds.map(function(b) { return b[1]; });
+						var minLon = Math.min.apply(null, lons);
+						var maxLon = Math.max.apply(null, lons);
+						var minLat = Math.min.apply(null, lats);
+						var maxLat = Math.max.apply(null, lats);
+						
+						// Fit bounds with padding
+						map.fitBounds(
+							[[minLon, minLat], [maxLon, maxLat]],
+							{
+								padding: { top: 50, bottom: 50, left: 50, right: 50 },
+								duration: 1000 // Smooth animation
+							}
+						);
+					}
+				}
+			}
+		);
+	});
+
+	function add_point(p) {
 		console.log(p);
 
-		var i = L.icon({
-			iconUrl: p.photo,
-			iconSize:	[40, 40],
-			className: "icon-image"
-		});
+		// Skip empty rows
+		if (!p.lat || !p.lon) {
+			return false;
+		}
 
-		var waze = "https://waze.com/ul?ll="+p.lat+","+p.lon+"&z=10&navigate=yes";
-		var text = '<a class="title" target="_blank" href="'+p.url+'">'+p.name+"</a><br />\n<p>"+p.description+"</p>\n";
-		text += '<p class="nav-link"><a href="'+waze+'">נווט עם ווייז</a></p>';
+		var lat = parseFloat(p.lat);
+		var lon = parseFloat(p.lon);
 
-		m = L.marker([p.lat, p.lon], {icon: i}).bindPopup(text);
-		markers.addLayer(m);
+		// Create marker element
+		var el = document.createElement('div');
+		el.className = 'marker';
+		el.style.width = '40px';
+		el.style.height = '40px';
+		el.style.borderRadius = '50%';
+		el.style.backgroundColor = '#fff';
+		el.style.padding = '4px';
+		el.style.cursor = 'pointer';
+		
+		var img = document.createElement('img');
+		img.src = p.photo;
+		img.style.width = '100%';
+		img.style.height = '100%';
+		img.style.borderRadius = '50%';
+		img.style.objectFit = 'cover';
+		el.appendChild(img);
+
+		// Create popup content
+		var waze = "https://waze.com/ul?ll=" + lat + "," + lon + "&z=10&navigate=yes";
+		var popupContent = '<div style="text-align: right; direction: rtl;">';
+		popupContent += '<a class="title" target="_blank" href="' + p.url + '">' + p.name + "</a><br />";
+		popupContent += "<p>" + p.description + "</p>";
+		popupContent += '<p class="nav-link"><a href="' + waze + '">נווט עם ווייז</a></p>';
+		popupContent += '</div>';
+
+		var popup = new maplibregl.Popup({ offset: 25 })
+			.setHTML(popupContent);
+
+		// Create marker
+		var marker = new maplibregl.Marker({
+			element: el
+		})
+			.setLngLat([lon, lat])
+			.setPopup(popup)
+			.addTo(map);
+
+		markers.push(marker);
+		return true;
 	}
-
 </script>
 </body>
 </html>
